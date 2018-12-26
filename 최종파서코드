@@ -1,0 +1,39 @@
+import csv
+from bs4 import BeautifulSoup as soup
+import requests, re
+from collections import namedtuple
+csvFile = open("‎⁨iCloud Drive⁩ ▸ ⁨Desktop⁩ ▸ ⁨scaper ▸ ebay.csv", "wt")
+writer = csv.writer(csvFile)
+def check_under_val(val=200):
+    def outer(f):
+        def wrapper(cls):
+            if cls.page is not None:
+                raise StopIteration("Search results for given link under {}".format(val))
+            return f(cls)
+        return wrapper
+    return outer
+class Results:
+    product = namedtuple('product', ['price', 'rating', 'link'])
+    def __init__(self, link):
+        self.link = link
+        self.pagination = [i.text for i in
+                           soup(requests.get(link).text, 'html.parser').find_all('li', {'class': 'x-pagination__li'})]
+        self.page = [Results.product(*i) for i in Results.scrape_page(self.link)] if not self.pagination else None
+    @staticmethod
+    def concatenate(link, num: str):
+        return re.sub('\d+$', num, link)
+    @staticmethod
+    def scrape_page(url):
+        current_page = soup(requests.get(url).text, 'html.parser')
+        tags = [['span', 's-item__price'],
+                ['span', 's-item__shipping s-item__logisticsCost'], ['span', 's-item__location s-item__itemLocation']]
+        items = [i for i in current_page.find_all('li', {'class': 's-item'})]
+        return [[getattr(i.find(tag, {'class': c}), 'text', 'N/A') for tag, c in tags] for i in items]
+    @check_under_val(val=200)
+    def __iter__(self):
+        for page in self.pagination:
+            yield [Results.product(*i) for i in Results.scrape_page(Results.concatenate(self.link, page))]
+start = 'https://www.ebay.com/sch/i.html?_from=R40&_trksid=m570.l1313&_nkw=cisco+compatible+sfp-10g-sr&_sacat=0&LH_TitleDesc=0&_osacat=0&_odkw=cisco+compatible+sfp-10g-lr&LH_TitleDesc=0%7C0'
+r1 = Results(start)
+for page in r1:
+    print(page)
